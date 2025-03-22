@@ -2,16 +2,20 @@
 
 ## Overview
 
-The TCP-Server library is a lightweight, multi-threaded TCP server designed for handling structured command-based communication. It listens on `localhost` and delegates command processing to a user-defined class that implements a standardized interface.
+The TCP-Server library is a lightweight, multi-threaded TCP server designed for handling structured, command-based communication. It listens on `localhost` and delegates command processing to a user-defined class that implements a standardized interface.
+
+---
 
 ## Features
 
-- ✅ Multi-threaded client handling
-- ✅ Customizable command processing (`tcp_command_handler.*`)
-- ✅ Supports adding/removing commands dynamically
-- ✅ Graceful shutdown with `SIGINT` and `SIGTERM` handling
-- ✅ Built-in logging via `LCBLog`
-- ✅ Test Python client (`scripts/tcp_server_test.py`) for command verification
+- ✅ **Multi-threaded client handling** – Each client connection is processed in its own thread.
+- ✅ **Customizable command processing** – Customize commands using your own implementation in `tcp_command_handler.*`.
+- ✅ **Dynamic command management** – Supports adding or removing commands on the fly.
+- ✅ **Graceful shutdown** – Signal-based shutdown (`SIGINT`/`SIGTERM`) with condition variable support for clean exit.
+- ✅ **Asynchronous logging** – Uses a dedicated logger thread (via `AsyncLogger`) to print full log messages without interleaving.
+- ✅ **Callback with Priority Support** – Server events are reported via a callback that accepts a priority enum (DEBUG, INFO, WARN, ERROR, FATAL), a message, and a success flag.
+- ✅ **Thread scheduling control** – Use `setPriority()` to adjust the server thread's scheduling policy and priority at runtime.
+- ✅ **Test Python client** – A Python script (`scripts/tcp_server_test.py`) is provided for command verification.
 
 ---
 
@@ -21,7 +25,7 @@ The TCP-Server library is a lightweight, multi-threaded TCP server designed for 
 
 Since this project uses `LCBLog` as a submodule, you must clone recursively:
 
-``` bash
+```bash
 git clone --recurse-submodules https://github.com/yourusername/TCP-Server.git
 cd TCP-Server
 ```
@@ -43,7 +47,11 @@ make
 
 This will generate the `tcp_server` objects in the src directory.
 
+---
+
 ### Running the Server
+
+#### Starting the Server
 
 Use the `test` target, which will compile and execute the test server.
 
@@ -51,11 +59,45 @@ Use the `test` target, which will compile and execute the test server.
 make test
 ```
 
-By default, the server listens on port 31415.
+The server is started from main.cpp with a callback that formats log messages in the form:
+
+```text
+[PRIORITY]: message
+```
+
+For example, in your code you can start the server like this:
+
+```cpp
+server.start(SERVERPORT, &handler, 
+    [](TCP_Server::Priority priority, const std::string &msg, bool success) {
+        std::string priorityStr;
+        switch(priority) {
+            case TCP_Server::Priority::DEBUG: priorityStr = "DEBUG"; break;
+            case TCP_Server::Priority::INFO:  priorityStr = "INFO "; break;
+            case TCP_Server::Priority::WARN:  priorityStr = "WARN "; break;
+            case TCP_Server::Priority::ERROR: priorityStr = "ERROR"; break;
+            case TCP_Server::Priority::FATAL: priorityStr = "FATAL"; break;
+            default: priorityStr = "UNKWN"; break;
+        }
+        std::string fullMsg = "[" + priorityStr + "]: " + msg;
+        gLogger.log(fullMsg);
+    }
+);
+```
+
+#### Thread Scheduling
+
+You can adjust the server thread’s scheduling policy and priority after startup using the setPriority() method. For example:
+
+```cpp
+if (!server.setPriority(SCHED_FIFO, 20)) {
+    std::cerr << "Failed to update server thread priority." << std::endl;
+}
+```
 
 ### Stopping the Server
 
-To stop the server, press:
+To stop the demo server, press:
 
 ``` bash
 CTRL+C
@@ -65,6 +107,15 @@ or send a SIGTERM signal:
 
 ``` bash
 kill -SIGTERM $(pgrep tcp_test)
+```
+
+In your own code, you would stop the server threads with:
+
+```cpp
+if (server.isRunning())
+{
+    server.stop(); // Ensure clean shutdown on Ctrl+C or SIGTERM.
+}
 ```
 
 ---
@@ -159,12 +210,7 @@ To remove a command, delete its handler function and remove it from `initializeH
 
 ## Logging
 
-This project uses `LCBLog` for structured logging.
-Modify logging levels in `main.cpp`:
-
-``` cpp
-llog.setLogLevel(DEBUG);
-```
+This project now uses an asynchronous logger (AsyncLogger) for structured logging. The logger prints complete messages (e.g., [DEBUG]: message) without interleaving, ensuring clarity when multiple messages are logged concurrently.  From within the class, use the callback to receive and print debug messages.
 
 Available levels:
 
@@ -173,6 +219,12 @@ Available levels:
 - `WARN`
 - `ERROR`
 - `FATAL`
+
+e.g.:
+
+```cpp
+callback(Priority::INFO, "Server stopped.", true);
+```
 
 ---
 
