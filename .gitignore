@@ -1,5 +1,6 @@
 # Ignore the test binary
-tcp_test
+*_test
+build/
 
 # Ignore backup and temporary files
 *~

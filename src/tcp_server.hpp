@@ -20,7 +20,6 @@
 #define TCP_SERVER_H
 
 #include "tcp_command_handler.hpp" // Use an external command handler
-#include "../src/LCBLog/lcblog.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -44,11 +43,8 @@ class TCP_Server
 public:
     /**
      * @brief Constructs a TCP server instance.
-     * @param port The port number to listen on.
-     * @param logger Reference to the logging system.
-     * @param handler Reference to a user-defined command handler.
      */
-    TCP_Server(int port, LCBLog &logger, TCP_CommandHandler &handler);
+    TCP_Server();
 
     /**
      * @brief Destructor for the TCP server.
@@ -60,8 +56,11 @@ public:
      * @brief Starts the TCP server.
      * @details Binds to the specified port and begins listening for connections.
      * @return True if the server starts successfully, false otherwise.
+     * 
+     * @param port The port number to listen on.
+     * @param handler Reference to a user-defined command handler.
      */
-    bool start();
+    bool start(int port, TCP_CommandHandler &handler);
 
     /**
      * @brief Stops the TCP server.
@@ -77,60 +76,55 @@ public:
      *
      * @return `true` if the server is running, `false` otherwise.
      */
-    bool isRunning() const { return running.load(); }
+    bool isRunning() const { return running_.load(); }
 
 private:
     /**
      * @brief Indicates if the server is running.
      * @details This atomic flag is used to safely start and stop the server.
      */
-    std::atomic<bool> running{false};
+    std::atomic<bool> running_;
 
     /**
      * @brief Mutex for synchronizing access to the server socket.
      */
-    std::mutex server_mutex;
+    std::mutex server_mutex_;
 
     /**
      * @brief Stores client-handling threads.
      */
-    std::vector<std::thread> client_threads;
+    std::vector<std::thread> client_threads_;
 
     /**
      * @brief Main server thread responsible for listening for connections.
      */
-    std::thread server_thread;
+    std::thread server_thread_;
 
     /**
      * @brief Mutex for synchronizing client thread management.
      */
-    std::mutex client_threads_mutex;
+    std::mutex client_threads_mutex_;
 
     /**
      * @brief The file descriptor for the server socket.
      */
-    int server_fd;
+    int server_fd_;
 
     /**
      * @brief The port number on which the server is listening.
      */
-    int port;
-
-    /**
-     * @brief Reference to the logging system.
-     */
-    LCBLog &log;
+    int port_;
 
     /**
      * @brief Reference to the command handler instance.
      * @details This is a user-implemented class that processes commands.
      */
-    TCP_CommandHandler &command_handler;
+    TCP_CommandHandler *command_handler_;
 
     /**
      * @brief Tracks the number of active connections.
      */
-    static std::atomic<int> active_connections;
+    static std::atomic<int> active_connections_;
 
     /**
      * @brief Runs the main server loop.

@@ -1,102 +1,204 @@
-# -----------------------------------------------------------------------------
-# @file Makefile
-# @brief Makefile for building the TCP Server and test suite.
-# @details
-# This Makefile provides build rules for the TCP Server library and its test 
-# suite. It supports compilation, cleaning, static analysis, and memory leak 
-# testing using Valgrind.
+# Makefile for building most C++ or C++ and C projects
+
+# C++ Version
+CXXVER := 17
+# Prefix for tests, "sudo" if required
+SUDO := #sudo
+# Debug tag
+DEBUG := -DDEBUG_TCP_SERVER
+
+# Get project name from Git
 #
-# Targets:
-#   - `make` (or `make all`): Builds the TCP server library (excluding main.cpp).
-#   - `make clean`: Removes all object files and test binaries.
-#   - `make test`: Builds and runs the test program (includes main.cpp).
-#   - `make valgrind`: Runs the test program with Valgrind to check for memory leaks.
-#   - `make lint`: Runs static analysis using cppcheck.
-#   - `make help`: Displays available targets.
-# -----------------------------------------------------------------------------
+# Project name from remote origin URL (fallback to 'unknown' if not available)
+PRJ := $(shell git config --local remote.origin.url 2>/dev/null | sed -n 's#.*/\([^.]*\)\.git#\1#p')
+# If PRJ is empty, fallback to current directory name
+PRJ := $(or $(PRJ),$(shell basename $$(pwd)))
+# If PRJ is "src", use the parent directory name
+PRJ := $(shell [ "$(PRJ)" = "src" ] && basename $$(dirname $$(pwd)) || echo "$(PRJ)")
+# Convert PRJ to lowercase for EXE_NAME
+EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
-# -----------------------------------------------------------------------------
-# Compiler and flags
-# -----------------------------------------------------------------------------
-CXX := g++
-CXXFLAGS := -Wall -Wextra -pedantic -std=c++17
-LDFLAGS := 
+# Output Items
+OUT := $(EXE_NAME)					# Normal release binary
+TEST_OUT :=	$(EXE_NAME)_test		# Debug/test binary
+# Strip whitespace from comments
+OUT := $(strip $(OUT))
+TEST_OUT := $(strip $(TEST_OUT))
 
-# -----------------------------------------------------------------------------
-# Directories
-# -----------------------------------------------------------------------------
-SRC_DIR := .
-LCBLOG_DIR := LCBLog
+# Output directories
+OBJ_DIR_RELEASE = build/obj/release
+OBJ_DIR_DEBUG   = build/obj/debug
+DEP_DIR         = build/dep
+BIN_DIR		 	= build/bin
 
-# -----------------------------------------------------------------------------
-# Source and Object Files
-# -----------------------------------------------------------------------------
-SRCS := $(SRC_DIR)/tcp_server.cpp $(LCBLOG_DIR)/lcblog.cpp $(SRC_DIR)/tcp_command_handler.cpp
-OBJS := $(SRCS:.cpp=.o)
+# Collect source files
+C_SOURCES   := $(shell find . -name "*.c")
+CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
 
-# -----------------------------------------------------------------------------
-# Test Program Configuration
-# -----------------------------------------------------------------------------
-TEST_SRC := main.cpp
-TEST_OBJ := $(TEST_SRC:.cpp=.o)
-TEST_BIN := tcp_test
+# Collect object files
+C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
+CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
 
-# -----------------------------------------------------------------------------
-# Default Target: Build Library (Excludes main.cpp)
-# -----------------------------------------------------------------------------
-all: $(OBJS)
+# Linker Flags
+LDFLAGS := -lpthread  -latomic
+# Get packages for linker from PKG_CONFIG_PATH
+# LDFLAGS += $(shell pkg-config --cflags --libs libgpiod)
+LDFLAGS += $(shell pkg-config --libs libgpiodcxx)
 
-# -----------------------------------------------------------------------------
-# Build Rules
-# -----------------------------------------------------------------------------
+# Collect dependency files
+DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
+# Include dependencies if they exist
+-include $(DEPFILES)
 
-# General build rule for all object files
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c "$<" -o "$@"
+# Compiler Executables
+CXX = g++
+CC = gcc
 
-# -----------------------------------------------------------------------------
-# Parallel Compilation
-# -----------------------------------------------------------------------------
-.PHONY: all clean test valgrind lint help
-MAKEFLAGS += -j$(nproc)
+# Allow threading using all available processors
+MAKEFLAGS := -j$(nproc)
 
-# -----------------------------------------------------------------------------
-# Clean Target: Remove All Compiled Files
-# -----------------------------------------------------------------------------
+# Compiler Flags
+#
+# Common flags for both C and C++ compilers
+COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
+
+# C Flags
+CFLAGS := $(COMMON_FLAGS)
+# C Debug Flags
+C_DEBUG_FLAGS := $(CFLAGS) -g -DDEBUG_PPMMANAGER	# Debug flags
+# C Release Flags
+C_RELEASE_FLAGS := $(CFLAGS) -O2					# Release optimized
+
+# C++ Flags
+CXXFLAGS := -Wno-psabi -lstdc++fs -std=c++$(CXXVER)
+CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
+# C++ Debug Flags
+CXX_DEBUG_FLAGS := $(CXXFLAGS) -g $(DEBUG)	# Debug flags
+# C++ Release Flags
+CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2		# Release optimized
+
+# Include paths for libraries
+# CXXFLAGS += -I$(abspath ./{folder}/src)
+
+# Define additional macros for the compiler
+# CXXFLAGS += -DXXX
+
+# Strip whitespaces
+C_DEBUG_FLAGS := $(strip $(C_DEBUG_FLAGS))
+C_RELEASE_FLAGS := $(strip $(C_RELEASE_FLAGS))
+CXX_DEBUG_FLAGS := $(strip $(CXX_DEBUG_FLAGS))
+CXX_RELEASE_FLAGS := $(strip $(CXX_RELEASE_FLAGS))
+
+# Enable verbose output if VERBOSE=1 is specified during the build
+VERBOSE ?= 0
+ifeq ($(VERBOSE), 1)
+	Q :=
+else
+	Q := @
+endif
+
+##
+# Compile and Link
+##
+
+# Compile C source files for debug
+$(OBJ_DIR_DEBUG)/%.o: %.c
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CC) $(C_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
+
+# Compile C++ source files for debug
+$(OBJ_DIR_DEBUG)/%.o: %.cpp
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
+
+# Link the debug binary
+build/bin/$(TEST_OUT): $(patsubst %.cpp,$(OBJ_DIR_DEBUG)/%.o,$(CPP_SOURCES)) $(patsubst %.c,$(OBJ_DIR_DEBUG)/%.o,$(C_SOURCES))
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug binary: $(TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o build/bin/$(TEST_OUT) $(LDFLAGS)
+
+# Compile C++ source files (release)
+$(OBJ_DIR_RELEASE)/%.o: %.cpp
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (release) $< into $@"
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
+
+# Compile C source files (release)
+$(OBJ_DIR_RELEASE)/%.o: %.c
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (release) $< into $@"
+	$(Q)$(CC) $(C_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
+
+# Link the final binary (release)
+build/bin/$(OUT): $(C_OBJECTS) $(CPP_OBJECTS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking release binary: $(OUT)"
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) $^ -o $@ $(LDFLAGS)
+
+##
+# Make Targets
+##
+
+# Force the fefault to be release (order matters in targets otherwise)
+.DEFAULT_GOAL := release
+
+# Clean dirs
+.PHONY: clean
 clean:
-	rm -f $(OBJS) $(TEST_OBJ) $(TEST_BIN)
+	$(Q)echo "Cleaning up build artifacts."
+	$(Q)rm -rf build
 
-# -----------------------------------------------------------------------------
-# Compile and Run Test Program
-# -----------------------------------------------------------------------------
-test: $(OBJS) $(TEST_OBJ)
-	$(CXX) $(CXXFLAGS) $^ -o $(TEST_BIN)  # Ensure output is tcp_test
-	./$(TEST_BIN)
+# Release target
+.PHONY: release
+release: build/bin/$(OUT)
+	$(Q)echo "Release build completed successfully."
 
-# -----------------------------------------------------------------------------
-# Run Memory Leak Tests with Valgrind
-# -----------------------------------------------------------------------------
-valgrind: test
-	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TEST_BIN)
+# Debug target
+.PHONY: debug
+debug: build/bin/$(TEST_OUT)
+	$(Q)echo "Debug build completed successfully."
 
-# -----------------------------------------------------------------------------
-# Run Static Analysis with cppcheck
-# -----------------------------------------------------------------------------
+# Test target
+.PHONY: test
+test: debug
+	$(Q)if [ "$(SUDO)" = "sudo" ]; then \
+        echo "Running test with sudo privileges."; \
+    else \
+        echo "Running test with user privileges."; \
+    fi
+	$(Q)$(SUDO) ./build/bin/$(TEST_OUT)
+
+# Show only user-defined macros
+.PHONY: macros
+macros:
+	$(Q)echo "Defined Project Macros:"
+	$(Q)$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null | grep -v '^#define _' || true
+
+# Lint target
+.PHONY: lint
 lint:
-	@echo -e "\e[33m'cppcheck' seems to crap itself on Raspbian Bookworm 32, so I give up. The rest is commented out.\e[0m"
-	@exit 0
-	# @which cppcheck >/dev/null 2>&1 || { echo "Error: cppcheck not found. Please install it."; exit 1; }
-	# cppcheck --enable=all --std=c++17 --force --check-config \
-	#	-I. --quiet $(SRCS) $(TEST_SRC)
+	$(Q)if ! command -v cppcheck >/dev/null 2>&1; then \
+	    echo "Warning: cppcheck is not installed. Please install it to run static analysis."; \
+	    exit 1; \
+	fi
+	$(Q)echo "Running static analysis with cppcheck."
+	$(Q)cppcheck --platform=unix32 --std=c++$(CXXVER) --enable=all --inconclusive --force --inline-suppr --quiet $(CPP_SOURCES)
 
-# -----------------------------------------------------------------------------
-# Display Available Targets
-# -----------------------------------------------------------------------------
+# Display available make targets
+.PHONY: help
 help:
-	@echo "Available targets:"
-	@echo "  make (or make all)   - Build the TCP server library only"
-	@echo "  make clean           - Remove all object files and test binary"
-	@echo "  make test            - Build and run the test program"
-	@echo "  make valgrind        - Build and run with valgrind to check for memory leaks"
-	@echo "  make lint            - Run static analysis with cppcheck"
-	@echo "  make help            - Show this help message"
+	$(Q)echo "Available targets:"
+	$(Q)echo "  all          Build the project (default: release)."
+	$(Q)echo "  clean        Remove build artifacts."
+	$(Q)echo "  test         Run the binary with the INI file."
+	$(Q)echo "  lint         Run static analysis."
+	$(Q)echo "  macros       Show defined project macros."
+	$(Q)echo "  debug        Build with debugging symbols."
+	$(Q)echo "  release      Build optimized for production."
+	$(Q)echo "  help         Show this help message."

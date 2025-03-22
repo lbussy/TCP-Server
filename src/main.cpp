@@ -11,13 +11,17 @@
  * @note Graceful shutdown is handled using signal trapping.
  */
 
+// Project includes
 #include "tcp_server.hpp"
 #include "tcp_command_handler.hpp"
 
-#include <iostream>
-#include <csignal>
-#include <thread>
+// Standard includes
 #include <atomic>
+#include <csignal>
+#include <iostream>
+#include <thread>
+
+// System Includes
 
 /// @brief Port number for the TCP server.
 #define SERVERPORT 31415
@@ -26,8 +30,9 @@
 /// @note Declared as `extern` in a header if shared across files.
 std::atomic<bool> running(true); // Ensure this is defined ONLY in main.cpp
 
-/// @brief Global pointer to allow signal handling for the server instance.
-TCP_Server *serverInstance = nullptr;
+/// @brief Global pointers to allow handling for the server instance
+TCP_Server server;
+TCP_Commands handler;
 
 /**
  * @brief Signal handler to gracefully stop the server.
@@ -39,9 +44,9 @@ void signalHandler(int signal)
 {
     if (signal == SIGINT || signal == SIGTERM)
     {
-        if (serverInstance)
+        if (server.isRunning())
         {
-            serverInstance->stop(); // Ensure clean shutdown on Ctrl+C
+            server.stop(); // Ensure clean shutdown on Ctrl+C
         }
     }
 }
@@ -55,29 +60,25 @@ void signalHandler(int signal)
  */
 int main()
 {
-    LCBLog llog;
-    llog.setLogLevel(DEBUG);
-
-    TCP_Commands handler;
-    TCP_Server server(SERVERPORT, llog, handler);
-    serverInstance = &server;
+    //handler;
+    server.start(SERVERPORT, handler);
 
     // Register signal handlers for graceful shutdown
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
     // Start the server
-    if (!server.start())
+    if (!server.isRunning())
     {
         return 1;
     }
 
     // Wait for server to stop before exiting
-    while (serverInstance->isRunning())
+    while (server.isRunning())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
-    llog.logS(INFO, "Exiting main.");
+    std::cout  << "Exiting main." << std::endl;
     return 0;
 }
