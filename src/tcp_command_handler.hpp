@@ -20,10 +20,13 @@
 #ifndef TCP_COMMAND_HANDLER_H
 #define TCP_COMMAND_HANDLER_H
 
+// Project includes
 #include "tcp_command_interface.hpp"
-#include <unordered_map>
+
+// Standard includes
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 /**
  * @class TCP_Commands

@@ -5,7 +5,7 @@ CXXVER := 17
 # Prefix for tests, "sudo" if required
 SUDO := #sudo
 # Debug tag
-DEBUG := -DDEBUG_TCP_SERVER
+# DEBUG := -DDEBUG_TCP_SERVER
 
 # Get project name from Git
 #

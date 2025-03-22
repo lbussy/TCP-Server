@@ -16,20 +16,17 @@
  * @see https://github.com/lbussy/TCP-Server
  */
 
-#ifndef TCP_SERVER_H
-#define TCP_SERVER_H
+#ifndef TCP_SERVER_HPP
+#define TCP_SERVER_HPP
 
+// Project includes
 #include "tcp_command_handler.hpp" // Use an external command handler
 
-#include <cstdint>
-#include <cstring>
-#include <cctype>
+// Standard includes
 #include <atomic>
+#include <functional>
 #include <mutex>
-#include <vector>
 #include <thread>
-#include <unordered_map>
-#include <chrono>
 
 /**
  * @class TCP_Server
@@ -41,6 +38,16 @@
 class TCP_Server
 {
 public:
+    // Public enum for callback priorities. Matches those in LCBLog.
+    enum class Priority
+    {
+        DEBUG = 0, ///< Debug-level messages for detailed troubleshooting.
+        INFO,      ///< Informational messages for general system state.
+        WARN,      ///< Warnings indicating potential issues.
+        ERROR,     ///< Errors that require attention but allow continued execution.
+        FATAL      ///< Critical errors that result in program termination.
+    };
+
     /**
      * @brief Constructs a TCP server instance.
      */
@@ -52,94 +59,85 @@ public:
      */
     ~TCP_Server();
 
+    // Disable copying.
+    TCP_Server(const TCP_Server &) = delete;
+    TCP_Server &operator=(const TCP_Server &) = delete;
+
     /**
      * @brief Starts the TCP server.
      * @details Binds to the specified port and begins listening for connections.
-     * @return True if the server starts successfully, false otherwise.
-     * 
+     *
      * @param port The port number to listen on.
-     * @param handler Reference to a user-defined command handler.
+     * @param handler Pointer to a user-defined command handler.
+     * @param callback Optional callback that will be invoked with a message string and a success flag.
+     *                 For example: [](Priority::INFO, const std::string &msg, bool success){ ... }
+     * @return True if the server starts successfully, false otherwise.
      */
-    bool start(int port, TCP_CommandHandler &handler);
+    bool start(int port, TCP_CommandHandler *handler,
+               std::function<void(TCP_Server::Priority, const std::string &, bool)> cb);
 
     /**
      * @brief Stops the TCP server.
-     * @details Closes all client connections, shuts down the server socket,
-     *          and gracefully exits the main server loop.
+     * @details Closes the listening socket and gracefully exits the main server loop.
      */
     void stop();
 
     /**
-     * @brief Checks if the server is currently running.
-     * @details This function provides a thread-safe way to determine whether
-     *          the server is actively listening for connections.
+     * @brief Changes the scheduling policy and priority of the server thread.
      *
-     * @return `true` if the server is running, `false` otherwise.
+     * @param schedPolicy Scheduling policy to set (e.g., SCHED_FIFO, SCHED_RR).
+     * @param priority The new thread priority.
+     * @return True if the priority was successfully set; false otherwise.
+     */
+    bool setPriority(int schedPolicy, int priority);
+
+    /**
+     * @brief Checks if the server is currently running.
+     * @return True if the server is running, false otherwise.
      */
     bool isRunning() const { return running_.load(); }
 
 private:
-    /**
-     * @brief Indicates if the server is running.
-     * @details This atomic flag is used to safely start and stop the server.
-     */
-    std::atomic<bool> running_;
-
-    /**
-     * @brief Mutex for synchronizing access to the server socket.
-     */
+    /// @brief Mutex for synchronizing server start/stop operations.
     std::mutex server_mutex_;
 
-    /**
-     * @brief Stores client-handling threads.
-     */
-    std::vector<std::thread> client_threads_;
-
-    /**
-     * @brief Main server thread responsible for listening for connections.
-     */
+    /// @brief Main server thread responsible for listening for connections.
     std::thread server_thread_;
 
-    /**
-     * @brief Mutex for synchronizing client thread management.
-     */
-    std::mutex client_threads_mutex_;
-
-    /**
-     * @brief The file descriptor for the server socket.
-     */
-    int server_fd_;
-
-    /**
-     * @brief The port number on which the server is listening.
-     */
+    /// @brief The port number on which the server is listening.
     int port_;
 
-    /**
-     * @brief Reference to the command handler instance.
-     * @details This is a user-implemented class that processes commands.
-     */
+    /// @brief Indicates if the server is running.
+    std::atomic<bool> running_;
+
+    /// @brief Pointer to the command handler instance.
     TCP_CommandHandler *command_handler_;
 
-    /**
-     * @brief Tracks the number of active connections.
-     */
+    /// @brief The file descriptor for the server socket.
+    int server_fd_;
+
+    /// @brief Tracks the number of active connections.
     static std::atomic<int> active_connections_;
+
+    // Store the callback so you can call it later from any method.
+    std::function<void(Priority, const std::string &, bool)> callback_;
+
+    void callback(Priority priority, std::string message, bool result);
 
     /**
      * @brief Runs the main server loop.
-     * @details Listens for incoming client connections and delegates
-     *          them to handler threads.
+     * @details Listens for incoming client connections and delegates them
+     *          to handler threads.
      */
     void run_server();
 
     /**
      * @brief Handles a client connection.
-     * @details Reads input from the client, processes commands, and
-     *          sends responses.
      * @param client_socket The socket descriptor for the client connection.
+     * @details Reads input from the client, processes commands via the command handler,
+     *          sends responses, and closes the connection.
      */
     void handle_client(int client_socket);
 };
 
-#endif // TCP_SERVER_H
+#endif // TCP_SERVER_HPP
