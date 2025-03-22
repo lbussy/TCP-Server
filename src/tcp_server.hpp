@@ -74,7 +74,7 @@ public:
      * @return True if the server starts successfully, false otherwise.
      */
     bool start(int port, TCP_CommandHandler *handler,
-               std::function<void(TCP_Server::Priority, const std::string &, bool)> cb);
+        std::function<void(TCP_Server::Priority, const std::string &, bool)> cb = nullptr);
 
     /**
      * @brief Stops the TCP server.
