@@ -175,7 +175,7 @@ int main()
     // Start the TCP server with our callback.
     // server.start(SERVERPORT, &handler);
     server.start(SERVERPORT, &handler, callback_tcp_server);
-    server.setPriority(SCHED_FIFO, 10);
+    server.setPriority(SCHED_RR, 10);
 
     // Wait for the server to stop using a condition variable.
     std::unique_lock<std::mutex> lock(cv_mutex);

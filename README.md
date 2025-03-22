@@ -90,7 +90,7 @@ server.start(SERVERPORT, &handler,
 You can adjust the server thread’s scheduling policy and priority after startup using the setPriority() method. For example:
 
 ```cpp
-if (!server.setPriority(SCHED_FIFO, 20)) {
+if (!server.setPriority(SCHED_RR, 20)) {
     std::cerr << "Failed to update server thread priority." << std::endl;
 }
 ```
