@@ -3,7 +3,7 @@
 # C++ Version
 CXXVER := 17
 # Prefix for tests, "sudo" if required
-SUDO := #sudo
+SUDO := sudo
 # Debug tag
 # DEBUG := -DDEBUG_TCP_SERVER
 

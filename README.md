@@ -68,7 +68,7 @@ The server is started from main.cpp with a callback that formats log messages in
 For example, in your code you can start the server like this:
 
 ```cpp
-server.start(SERVERPORT, &handler, 
+server.start(SERVERPORT, &handler,
     [](TCP_Server::Priority priority, const std::string &msg, bool success) {
         std::string priorityStr;
         switch(priority) {

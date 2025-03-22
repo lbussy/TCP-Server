@@ -112,25 +112,56 @@ bool TCP_Server::start(int port, TCP_CommandHandler *handler,
     return true;
 }
 
+/**
+ * @brief Sets the scheduling policy and priority for the server thread.
+ *
+ * @details
+ * Applies a real-time or standard scheduling policy to the server thread
+ * using `pthread_setschedparam()`. This can improve responsiveness
+ * in latency-sensitive use cases, especially when using `SCHED_FIFO` or `SCHED_RR`.
+ *
+ * If the server thread is not running or joinable, this function fails and logs
+ * an error via the configured callback.
+ *
+ * @param schedPolicy Scheduling policy (e.g., `SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`).
+ * @param priority Priority value to set for the thread (must be valid for the given policy).
+ *
+ * @return `true` if the scheduling policy and priority were successfully applied.
+ * @return `false` if the server thread is not active or if the operation fails.
+ *
+ * @note
+ * Requires appropriate privileges (e.g., `CAP_SYS_NICE`) to apply real-time policies.
+ */
 bool TCP_Server::setPriority(int schedPolicy, int priority)
 {
-    // Ensure that the server thread is running.
+    // Ensure the server thread is active and joinable
     if (!running_.load() || !server_thread_.joinable())
     {
-        callback(Priority::ERROR, "Server thread is not running. Cannot set priority.", false);
+        callback(Priority::ERROR,
+                 "Server thread is not running. Cannot set priority.",
+                 false);
         return false;
     }
 
+    // Prepare scheduling parameters
     pthread_t nativeHandle = server_thread_.native_handle();
     sched_param sch_params;
     sch_params.sched_priority = priority;
+
+    // Apply scheduling policy and priority to the server thread
     int ret = pthread_setschedparam(nativeHandle, schedPolicy, &sch_params);
     if (ret != 0)
     {
-        callback(Priority::ERROR, "pthread_setschedparam failed: " + std::string(strerror(ret)), false);
+        callback(Priority::ERROR,
+                 "pthread_setschedparam failed: " + std::string(strerror(ret)),
+                 false);
         return false;
     }
-    callback(Priority::DEBUG, "Thread scheduling set to policy " + std::to_string(schedPolicy) + " with priority " + std::to_string(priority), true);
+
+    callback(Priority::DEBUG,
+             "Thread scheduling set to policy " + std::to_string(schedPolicy) +
+             " with priority " + std::to_string(priority),
+             true);
 
     return true;
 }
